@@ -14,17 +14,12 @@ class Wand(ttk.Frame):
         except FileNotFoundError:
             buf = ''
             self.master.title('Untitled')
-
-        self.master.columnconfigure(0, weight=1)
-        self.master.rowconfigure(0, weight=1)
             
-        self.grid(sticky=N+S+E+W)
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
+        self.pack(fill=BOTH, expand=1)
         
         self.editor = Text(self)
         self.editor.insert(0.0, buf)
-        self.editor.grid(row=0, column=0, sticky=N+S+E+W)
+        self.editor.pack(fill=BOTH, expand=1)
 
 if __name__ == '__main__':
     try:
