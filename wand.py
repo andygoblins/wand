@@ -34,15 +34,17 @@ class Wand(ttk.Frame):
         print('copy')
         
 class SamMenu(Menu):
+    '''SamMenu behaves like the mouse menus from the text editor sam.
+    The menu stays open only while the mouse button is held down, and selects
+    whatever is under the mouse when the mouse button is released. The "primary"
+    menu entry is directly under the mouse when the menu appears.
+    '''
     def __init__(self, root, button, items, primary):
         Menu.__init__(self, root, tearoff=0)
         self.primary = primary
         for i in items:
             self.add_command(label=i[0], command=i[1])
         root.bind(button, self.popup)
-        #TODO need to make menu options still active even if mouse moves past bounds.
-        #self.bind('<Leave>', lambda e: "break")
-        #self.bind('<Enter>', lambda e: "break")
         
     def popup(self, event):
         # 5 is magic. It might only look good with default font size...
