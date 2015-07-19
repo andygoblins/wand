@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+import itertools
 from tkinter import *
 from tkinter import ttk
 
@@ -11,38 +12,41 @@ class Wand():
         self.open(filename)
     def open(self, filename):
         if filename in self.editors:
-            #open a peer
-            ed = self.editors[filename]
-            ed.peer_create(
+            ed = self.editors[filename][0]
+            n = Editor(filename, peer=ed)
+            self.editors[filename].append(n)
         else:
-            #open a new file
+            n = Editor(filename)
+            self.editors[filename] = [n]
 
 class Editor(ttk.Frame):
-    def __init__(self, filename):
-        ttk.Frame.__init__(self, master=None)
-        try:
-            with open(filename, 'r') as file:
-                buf = file.read()
-                self.master.title(filename)
-        except FileNotFoundError:
-            buf = ''
-            self.master.title('Untitled')
-            
+    def __init__(self, filename, master=None, peer=None):
+        ttk.Frame.__init__(self, master=master)
+        if peer:
+            self.editor = peer.editor.peer_create(master)
+        else:
+            try:
+                with open(filename, 'r') as file:
+                    buf = file.read()
+                    self.master.title(filename)
+            except FileNotFoundError:
+                buf = ''
+                self.master.title('Untitled')
+            self.editor = TextHack(self)
+            self.editor.insert(0.0, buf)
+
+        self.editor.pack(side=LEFT, fill=BOTH, expand=1)  
         self.pack(fill=BOTH, expand=1)
-        
-        self.editor = Text(self)
-        self.editor.insert(0.0, buf)
-        self.editor.pack(side=LEFT, fill=BOTH, expand=1)
-        
-        self.scrollY = ttk.Scrollbar(self, orient=VERTICAL, command=self.editor.yview)
+        self.scrollY = ttk.Scrollbar(self, orient=VERTICAL,
+                                     command=self.editor.yview)
         self.scrollY.pack(side=RIGHT, fill=Y)
         self.editor['yscrollcommand'] = self.scrollY.set
         
-        self.menu = SamMenu(self.master, '<3>', [('find', self.find),('copy', self.copy),('find', self.find)], 1)
-
-        #TODO
-        self.bind('<Destroy>' self.destroy)
-    def destroy(self):
+        self.menu = SamMenu(self.master, '<3>', [('find', self.find),
+                                                 ('copy', self.copy),
+                                                 ('find', self.find)], 1)
+        self.bind('<Destroy>', self.close)
+    def close(self, event):
         #TODO unregister with Wand (Wand keeps track of editor peers).
         pass
     def find(self):
@@ -54,7 +58,12 @@ class TextHack(Text):
     """Same as regular Text, but implements fix from
     https://bugs.python.org/issue17945"""
 
-    def peer_create(self, newPathName=None, cnf={}, **kw): # new in Tk 8.5
+    peer_count = itertools.count(1)
+    
+    def __init__(self, master=None, **kw):
+        Text.__init__(self, master, **kw)
+
+    def peer_create(self, master=None, cnf={}, **kw): # new in Tk 8.5
             """Creates a peer text widget and any optional standard
             configuration options. By default the peer will have the same
             start and and end line as the parent widget, but these can be
@@ -62,7 +71,8 @@ class TextHack(Text):
             if master is None:
                 master = self.master
             if 'name' not in cnf:
-                peername = '%s%s%d' % (self._name, '_peer', next(self.peer_count))
+                peername = '%s%s%d' % (self._name, '_peer',
+                                       next(self.peer_count))
             else:
                 peername = cnf['name']
                 cnf.pop('name')
@@ -109,4 +119,5 @@ if __name__ == '__main__':
         filename = ''
 
     wand = Wand(filename)
+    wand.open(filename)
     wand.mainloop()
