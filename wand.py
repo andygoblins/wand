@@ -5,6 +5,11 @@ import os
 from tkinter import *
 from tkinter import ttk
 
+class _Tconst:
+    """some text constants"""
+    Load = "→"
+    Refresh = "↺"
+
 class Wand(ttk.Frame):
     """Main application class. Manages windows/frames"""
     def __init__(self, master, filename):
@@ -32,17 +37,10 @@ class Editor(ttk.Frame):
         ttk.Frame.__init__(self, master=master)
         self.pack(fill=BOTH, expand=1)
         self.tk_focusFollowsMouse()
-        try:
-            with open(filename, 'r') as file:
-                buf = file.read()
-            self.filename = filename
-        except FileNotFoundError:
-            #TODO indicate to user this is a new file?
-            buf = ''
-            self.filename = ''
-        self.master.title(self.filename)
-        self.build_widgets(buf)
-    def build_widgets(self, buf):
+        self.filename = filename
+        self.build_widgets()
+        self.loadURL()
+    def build_widgets(self):
         # controls frame has URL bar and basic buttons,
         # such as load/refresh, undo, redo, save,
         # and close.
@@ -50,14 +48,16 @@ class Editor(ttk.Frame):
         self.controls.pack(side=TOP, fill=BOTH, expand=1)
         self.urlbar = ttk.Entry(self.controls)
         self.urlbar.insert(0, self.filename)
+        self.urlbar.bind('<Return>', self.loadURL)
+        self.urlbar.bind('<<Paste>>', self.showLoadOrRefresh)
+        self.urlbar.bind('<KeyRelease>', self.showLoadOrRefresh)
         self.urlbar.pack(side=LEFT, fill=BOTH, expand=1)
-        r = ttk.Button(self.controls, text="Load", command=self.refresh)
-        r.pack(side=RIGHT)
+        self.bLoad = ttk.Button(self.controls, text=_Tconst.Load, command=self.loadURL)
+        self.bLoad.pack(side=RIGHT)
         
         # below the controls frame is the main editor window
         self.editor = Text(self)
         self.editor['insertunfocussed'] = 'solid' #don't ever hide cursor
-        self.editor.insert(0.0, buf)
         self.editor.pack(side=LEFT, fill=BOTH, expand=1)
         self.scrollY = ttk.Scrollbar(self, orient=VERTICAL,
                                      command=self.editor.yview)
@@ -67,8 +67,29 @@ class Editor(ttk.Frame):
         self.menu = SamMenu(self.master, '<3>', [('find', self.find),
                                                  ('copy', self.copy),
                                                  ('find', self.find)], 1)
-    def refresh(self):
-    	print('refresh')
+    def loadURL(self, e=None):
+        '''Load the file listed in the urlbar'''
+        # TODO prompt user if buffer is dirty with editor.edit_modified()
+        f = self.urlbar.get()
+        different = True if f == self.filename else False
+        try:
+            with open(f, 'r') as file:
+                buf = file.read()
+                self.editor.replace(0.0, END, buf)
+                if different:
+                    # loaded a new file. Can't undo to "unload" file.
+                    self.editor.edit_reset()
+                self.bLoad['text'] = _Tconst.Refresh
+                self.filename = f
+        except FileNotFoundError:
+            pass
+            #TODO indicate to user this is a new file?
+        self.master.title(self.filename)
+    def showLoadOrRefresh(self, e=None):
+        if self.urlbar.get() == self.filename:
+            self.bLoad['text'] = _Tconst.Refresh
+        else:
+            self.bLoad['text'] = _Tconst.Load
     def find(self):
         print('find')
     def copy(self):
