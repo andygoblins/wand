@@ -1,29 +1,30 @@
 #!/usr/bin/env python
 
-import sys
 import os
-from tkinter import *
+import sys
+import tkinter as tk
 from tkinter import ttk
+
 
 class _Tconst:
     """some text constants"""
     Load = "→"
     Refresh = "↺"
 
+
 class Wand(ttk.Frame):
     """Main application class. Manages windows/frames"""
     def __init__(self, master, filename):
-        ttk.Frame.__init__(self, master=master)
+        super().__init__(master)
         master.withdraw()
-        self.master = master
         self.wincount = 0
         self.bind_class('Toplevel', '<Destroy>', self.countwins)
         # TODO load config file here
         filename = os.path.realpath(filename) if filename else ''
         self.open(filename)
     def open(self, filename):
-        win = Toplevel(self.master)
-        Editor(win, filename)
+        win = tk.Toplevel(self.master)
+        EditFrame(win, filename)
         self.wincount += 1
     def countwins(self, event):
         if self.wincount > 1:
@@ -31,11 +32,11 @@ class Wand(ttk.Frame):
         else:
             self.master.destroy()
 
-class Editor(ttk.Frame):
-    """An editor window."""
+
+class EditFrame(ttk.Frame):
     def __init__(self, master, filename):
-        ttk.Frame.__init__(self, master=master)
-        self.pack(fill=BOTH, expand=1)
+        super().__init__(master)
+        self.pack(fill=tk.BOTH, expand=1)
         self.tk_focusFollowsMouse()
         self.filename = filename
         self.build_widgets()
@@ -45,28 +46,24 @@ class Editor(ttk.Frame):
         # such as load/refresh, undo, redo, save,
         # and close.
         self.controls = ttk.Frame(self)
-        self.controls.pack(side=TOP, fill=BOTH, expand=1)
+        self.controls.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
         self.urlbar = ttk.Entry(self.controls)
         self.urlbar.insert(0, self.filename)
         self.urlbar.bind('<Return>', self.loadURL)
         self.urlbar.bind('<<Paste>>', self.showLoadOrRefresh)
         self.urlbar.bind('<KeyRelease>', self.showLoadOrRefresh)
-        self.urlbar.pack(side=LEFT, fill=BOTH, expand=1)
+        self.urlbar.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
         self.bLoad = ttk.Button(self.controls, text=_Tconst.Load, command=self.loadURL)
-        self.bLoad.pack(side=RIGHT)
+        self.bLoad.pack(side=tk.RIGHT)
         
         # below the controls frame is the main editor window
-        self.editor = Text(self)
-        self.editor['insertunfocussed'] = 'solid' #don't ever hide cursor
-        self.editor.pack(side=LEFT, fill=BOTH, expand=1)
-        self.scrollY = ttk.Scrollbar(self, orient=VERTICAL,
+        self.editor = Editor(self)
+        self.editor.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        self.scrollY = ttk.Scrollbar(self, orient=tk.VERTICAL,
                                      command=self.editor.yview)
-        self.scrollY.pack(side=RIGHT, fill=Y)
+        self.scrollY.pack(side=tk.RIGHT, fill=tk.Y)
         self.editor['yscrollcommand'] = self.scrollY.set
-        
-        self.menu = SamMenu(self.master, '<3>', [('find', self.find),
-                                                 ('copy', self.copy),
-                                                 ('find', self.find)], 1)
+
     def loadURL(self, e=None):
         '''Load the file listed in the urlbar'''
         # TODO prompt user if buffer is dirty with editor.edit_modified()
@@ -85,36 +82,99 @@ class Editor(ttk.Frame):
             pass
             #TODO indicate to user this is a new file?
         self.master.title(self.filename)
+        
     def showLoadOrRefresh(self, e=None):
         if self.urlbar.get() == self.filename:
             self.bLoad['text'] = _Tconst.Refresh
         else:
             self.bLoad['text'] = _Tconst.Load
-    def find(self):
-        print('find')
-    def copy(self):
-        print('copy')
+
         
-class SamMenu(Menu):
+class SamMenu(tk.Menu):
     """SamMenu behaves like the mouse menus from the text editor sam.
     The menu stays open only while the mouse button is held down, and
     selects whatever is under the mouse when the mouse button is
-    released. The "primary" menu entry is directly under the mouse when
+    released. The "select" menu entry is directly under the mouse when
     the menu appears."""
-    def __init__(self, root, button, items, primary):
-        Menu.__init__(self, root, tearoff=0)
-        self.primary = primary
-        for i in items:
-            self.add_command(label=i[0], command=i[1])
-        root.bind(button, self.popup)
-    def popup(self, event):
+    def __init__(self, master):
+        super().__init__(master=master, tearoff=0)
+
+    def popup(self, event, select=0):
         # 5 is magic. It might only look good with default font size...
-        yoff = self.yposition(self.primary) + 5
+        yoff = self.yposition(select) + 5
         xoff = self.winfo_reqwidth() // 2
         self.post(event.x_root - xoff, event.y_root - yoff)
         # Need to grab pointer for menu to work right. Parent widget has 
         # pointer grab after button press for drag events.
         self.grab_set()
+
+
+class CopyPasteMenu(SamMenu):
+    def __init__(self, tk_text_window):
+        super().__init__(tk_text_window)
+        self.add_command(label='Cut', command=self.cut)
+        self.add_command(label='Copy', command=self.copy)
+        self.add_command(label='Paste', command=self.paste)
+
+    def popup(self, event):
+        if self.master.tag_ranges(tk.SEL):
+            self.entryconfig(0, state=tk.ACTIVE)
+            self.entryconfig(1, state=tk.ACTIVE)
+            select = 1
+        else:
+            # if no selection, can't cut or copy
+            self.entryconfig(0, state=tk.DISABLED)
+            self.entryconfig(1, state=tk.DISABLED)
+            select = 2
+        super().popup(event, select)
+
+    def cut(self):
+        self.master.event_generate('<<Cut>>')
+
+    def copy(self):
+        self.master.event_generate('<<Copy>>')
+
+    def paste(self):
+        self.master.event_generate('<<Paste>>')
+
+
+class ButtonEvent():
+    def __init__(self, seq, act):
+        self.seq = seq
+        self.act = act
+
+
+class MouseEvents:
+    """Add-in for mouse chording events. Assumes self inherits from tk.Text"""
+    def mouse_events_start(self):
+        self.bind('<ButtonPress>', self._bpress_event)
+        # bind all so menu buttons don't steal the release event
+        self.bind_all('<ButtonRelease>', self._brel_event)
+        self.cpMenu = CopyPasteMenu(self)
+        self.chord = []
+        self.b_events = [
+            ButtonEvent([1,3], self.cpMenu.popup),
+            #ButtonEvent([8,3], self.exMenu.popup),
+        ]
+
+    def _bpress_event(self, event):
+        self.chord.append(event.num)
+        for e in self.b_events:
+            if e.seq == self.chord:
+                e.act(event)
+                return
+
+    def _brel_event(self, event):
+        if event.num in self.chord:
+            self.chord.remove(event.num)
+
+
+class Editor(tk.Text, MouseEvents):
+    def __init__(self, master):
+        super().__init__(master)
+        self['insertunfocussed'] = 'solid' #don't ever hide cursor
+        self.mouse_events_start()
+
 
 if __name__ == '__main__':
     try:
@@ -122,6 +182,6 @@ if __name__ == '__main__':
     except IndexError:
         filename = ''
 
-    root = Tk()
+    root = tk.Tk()
     wand = Wand(root, filename)
     root.mainloop()
