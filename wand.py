@@ -143,6 +143,54 @@ class ButtonEvent():
         self.seq = seq
         self.act = act
 
+class Selector:
+    """Control a text selection. Text selection is word-based, not
+    character based, because ordinarilly, users want to select entire
+    words, not parts of words.
+    """
+    def __init__(self, textWindow, tagname):
+        """The selector will create selections in the provided text
+        window. The selection will be tagged with tagname; use
+        textWindow.tag_configure to adjust how the selection will be
+        displayed.
+        """
+        self.master = textWindow
+        self.name = tagname
+        self.start = ''
+        self.end = ''
+
+    def _tag(self, i1, i2, func=''):
+        """Support backwards selections"""
+        if self.master.compare(i1, '<=', i2):
+            getattr(self.master, func)(self.name, i1+' wordstart', i2+' wordend')
+        else:
+            getattr(self.master, func)(self.name, i2+' wordstart', i1+' wordend')
+
+    def tag_add(self, i1, i2): self._tag(i1, i2, func='tag_add')
+
+    def tag_remove(self, i1, i2): self._tag(i1, i2, func='tag_remove')
+        
+    def begin_select(self, event):
+        self.oldstart = self.start
+        self.start = '@{},{}'.format(event.x, event.y)
+        self.master.bind_all('<Motion>', self.update_select)
+
+    def update_select(self, event):
+        if self.oldstart:
+            self.tag_remove(self.oldstart, self.end)
+            self.oldstart = ''
+        else:
+            self.unselect()
+        self.end = '@{},{}'.format(event.x, event.y)
+        self.tag_add(self.end, self.start)
+
+    def end_select(self, event):
+        self.master.unbind_all('<Motion>')
+
+    def unselect(self):
+        if self.end:
+            self.tag_remove(self.start, self.end)
+
 
 class MouseEvents:
     """Add-in for mouse chording events. Assumes self inherits from tk.Text"""
@@ -152,19 +200,28 @@ class MouseEvents:
         self.bind_all('<ButtonRelease>', self._brel_event)
         self.cpMenu = CopyPasteMenu(self)
         self.chord = []
-        self.b_events = [
+        s = Selectable(self, 'sel2')
+        self.tag_configure('sel2', background='red', foreground='white')
+        self.bp_events = [
             ButtonEvent([1,3], self.cpMenu.popup),
+            ButtonEvent([8], s.begin_select),
             #ButtonEvent([8,3], self.exMenu.popup),
+        ]
+        self.br_events = [
+            ButtonEvent([8], s.end_select),
         ]
 
     def _bpress_event(self, event):
         self.chord.append(event.num)
-        for e in self.b_events:
+        for e in self.bp_events:
             if e.seq == self.chord:
                 e.act(event)
                 return
 
     def _brel_event(self, event):
+        for e in self.br_events:
+            if e.seq == [event.num]:
+                e.act(event)
         if event.num in self.chord:
             self.chord.remove(event.num)
 
